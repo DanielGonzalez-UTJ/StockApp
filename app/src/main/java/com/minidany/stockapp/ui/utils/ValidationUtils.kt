@@ -57,3 +57,91 @@ fun validateConfirmPassword(password: String, confirmPassword: String): String? 
 
     return null
 }
+
+// VALIDACIONES CODIGO DE BARRAS
+fun validateBarcode(barcode: String): String? {
+    if (barcode.isBlank()) {
+        return "Ingresa o escanea el código de barras"
+    }
+
+    if (!barcode.all { it.isDigit()} ) {
+        return "El código de barras debe contener solo números"
+    }
+
+    return null
+}
+
+fun validateProductName(name: String): String? {
+    if (name.isBlank()) {
+        return "Ingresa el nombre del producto"
+    }
+
+    if (name.trim().length < 2) {
+        return "El nombre del producto debe tener al menos 2 caracteres"
+    }
+
+    return null
+}
+
+fun validateProductCategory(category: String): String? {
+    if (category.isBlank()) {
+        return "Selecciona una categoría"
+    }
+
+    return null
+}
+
+fun validateProductPrice(
+    price: String,
+    type: String
+): String? {
+    if (price.isBlank()) {
+        return "Ingresa el precio de $type"
+    }
+
+    val parsed = price.toDoubleOrNull() ?: return "Ingresa un precio válido"
+
+    if (!parsed.isFinite()) {
+        return "Ingresa un precio válido"
+    }
+
+    if (parsed < 0) {
+        return "El precio no puede ser negativo"
+    }
+
+    return null
+}
+
+fun validateProductStock(
+    stock: String,
+    type: String
+): String? {
+    if (stock.isBlank()) {
+        return "Ingresa el stock de $type"
+    }
+
+    val parsed = stock.toIntOrNull() ?: return "Ingresa una cantidad válida"
+
+    if (parsed < 0) {
+        return "El stock no puede ser negativo"
+    }
+
+    return null
+}
+
+fun validateStockRange(
+    minimumStock: String,
+    maximumStock: String
+): String? {
+    val minimum = minimumStock.toIntOrNull()
+        ?: return null
+
+    val maximum = maximumStock.toIntOrNull()
+        ?: return null
+
+    if (minimum > maximum) {
+        return "El stock mínimo no puede superar el máximo"
+    }
+
+    return null
+}

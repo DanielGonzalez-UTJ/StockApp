@@ -45,7 +45,8 @@ import com.minidany.stockapp.ui.utils.validatePassword
 fun LoginScreen(
     modifier: Modifier = Modifier,
     onRegisterClick: () -> Unit = {},
-    onForgotPasswordClick: () -> Unit = {}
+    onForgotPasswordClick: () -> Unit = {},
+    onLoginSuccess: () -> Unit = {}
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -184,6 +185,10 @@ fun LoginScreen(
             onClick = {
                 emailError = validateEmail(email)
                 passwordError = validatePassword(password)
+
+                if (emailError == null && passwordError == null) {
+                    onLoginSuccess()
+                }
             },
             modifier = Modifier
                 .fillMaxWidth()

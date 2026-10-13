@@ -39,6 +39,7 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.runtime)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
@@ -47,6 +48,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-text-google-fonts")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.9.5")
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+
     implementation(libs.androidx.ui)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
