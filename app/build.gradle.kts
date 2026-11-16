@@ -49,6 +49,9 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.9.5")
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
 
     implementation(libs.androidx.ui)
     testImplementation(libs.junit)

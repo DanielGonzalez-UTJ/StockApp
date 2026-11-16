@@ -1,5 +1,6 @@
 package com.minidany.stockapp.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
@@ -27,6 +29,7 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -38,19 +41,27 @@ import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.minidany.stockapp.data.remote.RetrofitClient
 import com.minidany.stockapp.ui.theme.StockAppTheme
+import com.minidany.stockapp.ui.utils.scanBarcode
+import kotlinx.coroutines.launch
 
 data class Product(
     val id: String,
@@ -58,7 +69,8 @@ data class Product(
     val category: String,
     val stock: Int,
     val minStock: Int,
-    val price: Double
+    val price: Double,
+    val barcode: String = ""
 )
 
 @Composable
@@ -71,52 +83,69 @@ fun InventoryScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("Todos") }
 
-    val productList = remember {
-        listOf(
-            Product(
-                "1",
-                "Paletas de Caramelo Macizo",
-                "Dulces",
-                45,
-                10,
-                25.50
-            ),
-            Product(
-                "2",
-                "Chocolates Rellenos 100g",
-                "Chocolates",
-                8,
-                15,
-                45.00
-            ),
-            Product(
-                "3",
-                "Gomitas Enchiladas Bote",
-                "Gomitas",
-                30,
-                10,
-                60.00
-            ),
-            Product(
-                "4",
-                "Lucas Muecas Sabor Mango",
-                "Dulces",
-                5,
-                12,
-                12.00
-            )
-        )
-        // emptyList<Product>()
+    // Estados de carga y productos.
+    var productList by remember { mutableStateOf<List<Product>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableStateOf(0) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Consultar los productos reales de la base de datos.
+    LaunchedEffect(refreshKey) {
+        isLoading = true
+        errorMessage = null
+
+        try {
+            val response = RetrofitClient.api.listarProductos()
+
+            if (response.isSuccessful) {
+                val resultado = response.body()
+
+                if (resultado?.success == true) {
+                    productList = resultado.productos.map { producto ->
+                        Product(
+                            id = producto.id.toString(),
+                            name = producto.nombre,
+                            category = producto.categoria ?: "Sin categoría",
+                            stock = producto.stock,
+                            minStock = producto.stockMinimo,
+                            price = producto.precioVenta
+                                ?.toDoubleOrNull() ?: 0.0,
+                            barcode = producto.codigoBarras ?: ""
+                        )
+                    }
+                } else {
+                    errorMessage = "No se pudieron obtener los productos."
+                }
+            } else {
+                errorMessage = "Error del servidor: ${response.code()}"
+            }
+        } catch (e: Exception) {
+            errorMessage = "No se pudo conectar con el servidor. Verifica tu conexión."
+        } finally {
+            isLoading = false
+        }
     }
 
+    // Buscar por nombre, categoría o código de barras.
     val filteredProducts = productList.filter { product ->
+        val query = searchQuery.trim()
+
         val matchesSearch =
-            product.name.contains(searchQuery, ignoreCase = true) ||
-            product.category.contains(searchQuery, ignoreCase = true)
+            product.name.contains(query, ignoreCase = true) ||
+                    product.category.contains(query, ignoreCase = true) ||
+                    product.barcode.contains(query, ignoreCase = true)
 
         val matchesFilter = when (selectedFilter) {
-            "Stock bajo" -> product.stock <= product.minStock
+            "Stock bajo" ->
+                product.stock > 0 &&
+                        product.stock <= product.minStock
+
             "Agotados" -> product.stock == 0
+
             else -> true
         }
 
@@ -126,6 +155,9 @@ fun InventoryScreen(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0),
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
+        },
         bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -169,11 +201,15 @@ fun InventoryScreen(
             }
         }
     ) { innerPadding ->
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+            contentPadding = PaddingValues(
+                horizontal = 24.dp,
+                vertical = 16.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
@@ -181,7 +217,9 @@ fun InventoryScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Text(
                             text = "Inventario",
                             style = MaterialTheme.typography.headlineMedium,
@@ -198,7 +236,9 @@ fun InventoryScreen(
                         )
                     }
 
-                    IconButton(onClick = onNavigateToAddProduct) {
+                    IconButton(
+                        onClick = onNavigateToAddProduct
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Agregar producto",
@@ -215,27 +255,66 @@ fun InventoryScreen(
             }
 
             item {
-                // BUSCADOR
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
+                // Buscador y escáner.
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    placeholder = {
-                        Text("Buscar producto...")
-                    },
-                    leadingIcon = {
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        placeholder = {
+                            Text("Buscar producto...")
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Buscar"
+                            )
+                        },
+                        shape = MaterialTheme.shapes.medium
+                    )
+
+                    IconButton(
+                        onClick = {
+                            scanBarcode(
+                                context = context,
+                                onSuccess = { scannedValue ->
+                                    searchQuery = scannedValue
+                                    selectedFilter = "Todos"
+
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            "Código escaneado: $scannedValue"
+                                        )
+                                    }
+                                },
+                                onError = {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            "No se pudo leer el código. Intenta nuevamente."
+                                        )
+                                    }
+                                }
+                            )
+                        },
+                        modifier = Modifier.size(48.dp)
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Buscar"
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Escanear código de barras",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(26.dp)
                         )
-                    },
-                    shape = MaterialTheme.shapes.medium
-                )
+                    }
+                }
             }
 
             item {
-                // FILTROS
+                // Filtros del inventario.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -243,33 +322,95 @@ fun InventoryScreen(
                     InventoryFilterChip(
                         text = "Todos",
                         selected = selectedFilter == "Todos",
-                        onClick = { selectedFilter = "Todos" }
+                        onClick = {
+                            selectedFilter = "Todos"
+                        }
                     )
 
                     InventoryFilterChip(
                         text = "Stock bajo",
                         selected = selectedFilter == "Stock bajo",
-                        onClick = { selectedFilter = "Stock bajo" }
+                        onClick = {
+                            selectedFilter = "Stock bajo"
+                        }
                     )
 
                     InventoryFilterChip(
                         text = "Agotados",
                         selected = selectedFilter == "Agotados",
-                        onClick = { selectedFilter = "Agotados" }
+                        onClick = {
+                            selectedFilter = "Agotados"
+                        }
                     )
                 }
             }
 
-
             item {
                 Text(
-                    text = "${filteredProducts.size} productos",
+                    text = if (isLoading) {
+                        "Cargando productos..."
+                    } else {
+                        "${filteredProducts.size} productos"
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             }
 
-            if (filteredProducts.isEmpty()) {
+            // Indicador de carga.
+            if (isLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
+
+            // Error de conexión.
+            else if (errorMessage != null) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Inventory2,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = errorMessage ?: "",
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                refreshKey++
+                            }
+                        ) {
+                            Text("Reintentar")
+                        }
+                    }
+                }
+            }
+
+            // Inventario vacío o resultados.
+            else if (filteredProducts.isEmpty()) {
                 item {
                     InventoryEmptyState(
                         hasProducts = productList.isNotEmpty(),
@@ -289,7 +430,6 @@ fun InventoryScreen(
                     )
                 }
             }
-
         }
     }
 }
@@ -303,10 +443,14 @@ fun InventoryFilterChip(
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = { Text(text) },
+        label = {
+            Text(text)
+        },
         colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+            selectedContainerColor =
+                MaterialTheme.colorScheme.primaryContainer,
+            selectedLabelColor =
+                MaterialTheme.colorScheme.onPrimaryContainer
         )
     )
 }
@@ -423,8 +567,10 @@ private fun InventoryProductCard(
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(
             width = 1.dp,
             color = MaterialTheme.colorScheme.outlineVariant
         ),
@@ -432,12 +578,16 @@ private fun InventoryProductCard(
             defaultElevation = 1.dp
         )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
                     Text(
                         text = product.name,
                         style = MaterialTheme.typography.titleMedium,
@@ -489,7 +639,9 @@ private fun InventoryProductCard(
                     )
                 }
 
-                Column(horizontalAlignment = Alignment.End) {
+                Column(
+                    horizontalAlignment = Alignment.End
+                ) {
                     Text(
                         text = "Stock mínimo",
                         style = MaterialTheme.typography.bodySmall,

@@ -10,10 +10,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
 import com.minidany.stockapp.ui.navigation.AppNavigation
 import com.minidany.stockapp.ui.theme.StockAppTheme
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.minidany.stockapp.ui.test.ConexionTestScreen
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         enableEdgeToEdge()
@@ -23,11 +26,11 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier.fillMaxSize()
                 ) { innerPadding ->
-
                     AppNavigation(
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
+                // ConexionTestScreen()
             }
         }
     }

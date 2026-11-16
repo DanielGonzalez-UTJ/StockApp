@@ -1,15 +1,7 @@
+
 package com.minidany.stockapp.ui.screens
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -18,14 +10,7 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Work
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,10 +21,20 @@ import com.minidany.stockapp.ui.theme.StockAppTheme
 
 @Composable
 fun ProfileScreen(
+    nombre: String = "Usuario",
+    correo: String = "",
+    rol: String = "",
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
     onLogOutClick: () -> Unit = {}
 ) {
+    val rolMostrado = when (rol.lowercase()) {
+        "admin" -> "Administrador"
+        "cajero" -> "Cajero"
+        "almacenista" -> "Almacenista"
+        else -> rol
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -86,7 +81,7 @@ fun ProfileScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
-            text = "Daniel González",
+            text = nombre,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold
         )
@@ -94,7 +89,7 @@ fun ProfileScreen(
         Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-            text = "Almacenista",
+            text = rolMostrado,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -109,16 +104,9 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp)
-            ) {
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Email,
                         contentDescription = null,
@@ -135,7 +123,7 @@ fun ProfileScreen(
                         )
 
                         Text(
-                            text = "dannyglezhdzo@gmail.com",
+                            text = correo,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -150,9 +138,7 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Work,
                         contentDescription = null,
@@ -169,7 +155,7 @@ fun ProfileScreen(
                         )
 
                         Text(
-                            text = "Almacenista",
+                            text = rolMostrado,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -208,7 +194,7 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.size(16.dp))
 
-                Column{
+                Column {
                     Text(
                         text = "Sistema de gestión de inventario",
                         style = MaterialTheme.typography.bodyMedium,
@@ -261,6 +247,10 @@ fun ProfileScreen(
 @Composable
 fun ProfileScreenPreview() {
     StockAppTheme {
-        ProfileScreen()
+        ProfileScreen(
+            nombre = "Carlos Ramírez",
+            correo = "almacenista@sweetmanager.com",
+            rol = "almacenista"
+        )
     }
 }

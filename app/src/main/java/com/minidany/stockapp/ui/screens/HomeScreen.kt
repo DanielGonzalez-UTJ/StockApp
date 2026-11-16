@@ -1,3 +1,4 @@
+
 package com.minidany.stockapp.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.RemoveShoppingCart
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warning
@@ -32,12 +34,20 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.minidany.stockapp.data.local.SessionManager
+import com.minidany.stockapp.data.remote.RetrofitClient
 import com.minidany.stockapp.ui.theme.StockAppTheme
 
 @Composable
@@ -45,19 +55,105 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     onProfileClick: () -> Unit = {},
     onNavigateInventory: () -> Unit = {},
-    onNavigateMovimientos: () -> Unit = {}
+    onNavigateMovimientos: () -> Unit = {},
+    onScanProductClick: (String) -> Unit = {}
 ) {
+    val context = LocalContext.current
+
+    val sessionManager = remember(context) {
+        SessionManager(context)
+    }
+
+    // Estados del nombre del usuario.
+    var userName by remember {
+        mutableStateOf("Cargando...")
+    }
+
+    // Estados de las estadísticas.
+    var totalProducts by remember {
+        mutableStateOf<Int?>(null)
+    }
+
+    var lowStockProducts by remember {
+        mutableStateOf<Int?>(null)
+    }
+
+    var outOfStockProducts by remember {
+        mutableStateOf<Int?>(null)
+    }
+
+    // Consultar perfil y estadísticas reales.
+    LaunchedEffect(Unit) {
+
+        // Obtener nombre del usuario.
+        try {
+            val token = sessionManager.obtenerToken()
+
+            if (!token.isNullOrBlank()) {
+                val profileResponse = RetrofitClient.api.obtenerPerfil(
+                    token = "Bearer $token"
+                )
+
+                val profileResult = profileResponse.body()
+
+                if (
+                    profileResponse.isSuccessful &&
+                    profileResult?.success == true &&
+                    profileResult.usuario != null
+                ) {
+                    userName = profileResult.usuario.nombre
+                } else {
+                    userName = "Usuario"
+                }
+            } else {
+                userName = "Usuario"
+            }
+
+        } catch (e: Exception) {
+            userName = "Usuario"
+            e.printStackTrace()
+        }
+
+        // Obtener estadísticas del inventario.
+        try {
+            val response = RetrofitClient.api.listarProductos()
+
+            if (response.isSuccessful) {
+                val result = response.body()
+
+                if (result?.success == true) {
+                    val products = result.productos
+
+                    totalProducts = products.size
+
+                    lowStockProducts = products.count { product ->
+                        product.stock > 0 &&
+                                product.stock <= product.stockMinimo
+                    }
+
+                    outOfStockProducts = products.count { product ->
+                        product.stock == 0
+                    }
+                }
+            }
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
             NavigationBar(
+                modifier = Modifier.height(72.dp),
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                windowInsets = NavigationBarDefaults.windowInsets,
+                windowInsets = WindowInsets(0.dp)
             ) {
                 NavigationBarItem(
                     selected = true,
-                    onClick = { /*TODO */ },
+                    onClick = {},
                     icon = {
                         Icon(
                             imageVector = Icons.Default.Home,
@@ -66,7 +162,8 @@ fun HomeScreen(
                     },
                     label = {
                         Text("Inicio")
-                    }
+                    },
+                    alwaysShowLabel = true
                 )
 
                 NavigationBarItem(
@@ -80,7 +177,8 @@ fun HomeScreen(
                     },
                     label = {
                         Text("Inventario")
-                    }
+                    },
+                    alwaysShowLabel = true
                 )
 
                 NavigationBarItem(
@@ -94,11 +192,13 @@ fun HomeScreen(
                     },
                     label = {
                         Text("Movimientos")
-                    }
+                    },
+                    alwaysShowLabel = true
                 )
             }
         }
     ) { innerPadding ->
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -106,6 +206,8 @@ fun HomeScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 16.dp)
         ) {
+
+            // Encabezado y saludo.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -113,14 +215,14 @@ fun HomeScreen(
             ) {
                 Column {
                     Text(
-                        text = "StockApp",
+                        text = "SweetManager",
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     )
 
                     Text(
-                        text = "Hola Daniel",
+                        text = "Hola $userName",
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
@@ -143,6 +245,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Resumen del inventario.
             Text(
                 text = "Resumen del inventario",
                 style = MaterialTheme.typography.titleLarge,
@@ -151,7 +254,9 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -164,14 +269,16 @@ fun HomeScreen(
                         tint = MaterialTheme.colorScheme.primary
                     )
 
-                    Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Column(
+                        modifier = Modifier.padding(start = 12.dp)
+                    ) {
                         Text(
                             text = "Productos registrados",
                             style = MaterialTheme.typography.bodyLarge
                         )
 
                         Text(
-                            text = "125",
+                            text = totalProducts?.toString() ?: "--",
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -187,14 +294,14 @@ fun HomeScreen(
             ) {
                 InventoryStatCard(
                     title = "Stock Bajo",
-                    value = "8",
+                    value = lowStockProducts?.toString() ?: "--",
                     icon = Icons.Default.Warning,
                     modifier = Modifier.weight(1f)
                 )
 
                 InventoryStatCard(
                     title = "Agotados",
-                    value = "3",
+                    value = outOfStockProducts?.toString() ?: "--",
                     icon = Icons.Default.RemoveShoppingCart,
                     modifier = Modifier.weight(1f)
                 )
@@ -202,6 +309,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            // Acciones rápidas.
             Text(
                 text = "Acciones rápidas",
                 style = MaterialTheme.typography.titleLarge,
@@ -218,7 +326,7 @@ fun HomeScreen(
                     title = "Entradas",
                     subtitle = "Registrar entrada",
                     icon = Icons.Default.MoveToInbox,
-                    onClick = { /*TODO */ },
+                    onClick = {},
                     modifier = Modifier.weight(1f)
                 )
 
@@ -226,7 +334,7 @@ fun HomeScreen(
                     title = "Salida",
                     subtitle = "Registrar salidas",
                     icon = Icons.Default.Outbox,
-                    onClick = { /* TODO */ },
+                    onClick = {},
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -241,15 +349,15 @@ fun HomeScreen(
                     title = "Proveedores",
                     subtitle = "Administrar",
                     icon = Icons.Default.LocalShipping,
-                    onClick = { /* TODO */ },
+                    onClick = {},
                     modifier = Modifier.weight(1f)
                 )
 
                 QuickActionCard(
-                    title = "Productos",
-                    subtitle = "Administrar",
-                    icon = Icons.Default.Inventory2,
-                    onClick = { /* TODO */ },
+                    title = "Escáner",
+                    subtitle = "Buscar por código",
+                    icon = Icons.Default.QrCodeScanner,
+                    onClick = {},
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -264,8 +372,12 @@ fun InventoryStatCard(
     icon: ImageVector,
     modifier: Modifier = Modifier
 ) {
-    Card(modifier = modifier) {
-        Column(modifier = Modifier.padding(16.dp)) {
+    Card(
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
@@ -300,7 +412,9 @@ fun QuickActionCard(
         onClick = onClick,
         modifier = modifier
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
@@ -326,10 +440,13 @@ fun QuickActionCard(
     }
 }
 
-@Preview(showBackground = true, showSystemUi = false)
+@Preview(
+    showBackground = true,
+    showSystemUi = false
+)
 @Composable
 fun HomeScreenPreview() {
-    StockAppTheme() {
+    StockAppTheme {
         HomeScreen()
     }
 }

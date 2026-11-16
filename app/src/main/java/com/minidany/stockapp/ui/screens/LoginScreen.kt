@@ -1,3 +1,4 @@
+
 package com.minidany.stockapp.ui.screens
 
 import androidx.compose.runtime.Composable
@@ -7,7 +8,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,7 +21,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,30 +29,41 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import com.minidany.stockapp.ui.theme.StockAppTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import com.minidany.stockapp.data.local.SessionManager
+import com.minidany.stockapp.data.model.LoginRequest
+import com.minidany.stockapp.data.remote.RetrofitClient
+import com.minidany.stockapp.ui.theme.StockAppTheme
 import com.minidany.stockapp.ui.utils.validateEmail
-import com.minidany.stockapp.ui.utils.validatePassword
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
     modifier: Modifier = Modifier,
-    onRegisterClick: () -> Unit = {},
     onForgotPasswordClick: () -> Unit = {},
-    onLoginSuccess: () -> Unit = {}
+    onLoginSuccess: (Boolean) -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val sessionManager = remember { SessionManager(context) }
+    val coroutineScope = rememberCoroutineScope()
+
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
+    var loginError by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -66,9 +77,7 @@ fun LoginScreen(
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.primaryContainer
         ) {
-            Box(
-                contentAlignment = Alignment.Center
-            ) {
+            Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.Default.Inventory2,
                     contentDescription = "Logo de StockApp",
@@ -101,6 +110,7 @@ fun LoginScreen(
             onValueChange = {
                 email = it
                 emailError = null
+                loginError = null
             },
             isError = emailError != null,
             supportingText = {
@@ -127,6 +137,7 @@ fun LoginScreen(
             onValueChange = {
                 password = it
                 passwordError = null
+                loginError = null
             },
             isError = passwordError != null,
             supportingText = {
@@ -150,11 +161,11 @@ fun LoginScreen(
                     }
                 ) {
                     Icon(
-                       imageVector = if (passwordVisible) {
-                           Icons.Default.VisibilityOff
-                       } else {
-                           Icons.Default.Visibility
-                       },
+                        imageVector = if (passwordVisible) {
+                            Icons.Default.VisibilityOff
+                        } else {
+                            Icons.Default.Visibility
+                        },
                         contentDescription = "Mostrar u ocultar contraseña"
                     )
                 }
@@ -171,7 +182,8 @@ fun LoginScreen(
 
         TextButton(
             onClick = onForgotPasswordClick,
-            modifier = Modifier.align(Alignment.End)
+            modifier = Modifier.align(Alignment.End),
+            enabled = !loading
         ) {
             Text(
                 text = "Olvidé mi contraseña",
@@ -179,66 +191,88 @@ fun LoginScreen(
             )
         }
 
+        if (loginError != null) {
+            Text(
+                text = loginError!!,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
         Button(
             onClick = {
-                emailError = validateEmail(email)
-                passwordError = validatePassword(password)
+                val correoError = validateEmail(email)
+                val claveError = if (password.isBlank()) {
+                    "Ingresa tu contraseña."
+                } else {
+                    null
+                }
 
-                if (emailError == null && passwordError == null) {
-                    onLoginSuccess()
+                emailError = correoError
+                passwordError = claveError
+                loginError = null
+
+                if (correoError == null && claveError == null) {
+                    coroutineScope.launch {
+                        loading = true
+
+                        try {
+                            val response = RetrofitClient.api.iniciarSesion(
+                                LoginRequest(
+                                    correo = email.trim(),
+                                    password = password
+                                )
+                            )
+
+                            val resultado = response.body()
+
+                            if (response.isSuccessful &&
+                                resultado?.success == true &&
+                                resultado.usuario != null &&
+                                !resultado.token.isNullOrBlank()
+                            ) {
+                                sessionManager.guardarToken(resultado.token)
+                                sessionManager.guardarUsuarioId(
+                                    resultado.usuario.id
+                                )
+
+                                onLoginSuccess(
+                                    resultado.usuario.debe_cambiar_clave == 1
+                                )
+                            } else {
+                                loginError = resultado?.mensaje
+                                    ?: "No se pudo iniciar sesión."
+                            }
+
+                        } catch (e: Exception) {
+                            loginError =
+                                "No se pudo conectar con el servidor. Verifica tu conexión."
+                        } finally {
+                            loading = false
+                        }
+                    }
                 }
             },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(12.dp),
+            enabled = !loading
         ) {
-            Text(
-                text = "Iniciar Sesión",
-                style = MaterialTheme.typography.bodyLarge
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            HorizontalDivider(
-                modifier = Modifier.weight(1f)
-            )
-
-            Text(
-                text = "o",
-                modifier = Modifier.padding(horizontal = 16.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            HorizontalDivider(
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "¿No tienes una cuenta?",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            TextButton(
-                onClick = onRegisterClick
-            ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp
+                )
+            } else {
                 Text(
-                    text = "Regístrate",
-                    style = MaterialTheme.typography.bodyMedium
+                    text = "Iniciar Sesión",
+                    style = MaterialTheme.typography.bodyLarge
                 )
             }
         }
